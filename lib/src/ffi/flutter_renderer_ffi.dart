@@ -197,9 +197,7 @@ class FFIFlutterFactory extends FFIFactory implements Finalizable {
   }
 
   static void _deleteRenderer(Pointer<Void> renderer) {
-    if (_canvasLookup[renderer.address]?.target == null) {
-      _canvasLookup.remove(renderer.address);
-    }
+    _canvasLookup.remove(renderer.address);
   }
 
   static void _deleteRenderPath(int path) {
