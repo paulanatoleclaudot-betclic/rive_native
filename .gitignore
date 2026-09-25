@@ -1,0 +1,5 @@
+# Build output only. Everything from the pub.dev tarball stays tracked.
+# /build/ is root-anchored: runtime/build/ is upstream source, not output.
+/build/
+/native/build/
+.dart_tool/
