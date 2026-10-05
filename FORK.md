@@ -16,6 +16,14 @@ callback runs, so one entry leaks per `Renderer.make` call, which means once
 per frame per animating Rive widget. The fix is on branch
 `fix/canvas-lookup-leak`; see its commit message for details.
 
+`FFIFlutterFactory.decodeImage` waits on `ui.decodeImageFromList`, whose
+callback only runs on success, so a failed decode (invalid bytes, or an
+allocation refused under memory pressure) never completes. That also blocks
+every later file decode, which awaits all pending images in
+`_loadingImages`. The fix decodes through `ui.instantiateImageCodec` and
+resolves a failure to `null`; see the `fix: resolve a failed Flutter image
+decode` commit.
+
 `version.txt` and `hash.txt` are untouched, so `bin/setup.dart` still downloads
 and verifies Rive's official prebuilt native libraries. We host no binaries.
 
@@ -23,7 +31,8 @@ and verifies Rive's official prebuilt native libraries. We host no binaries.
 
 - `main`: pristine commits only. Each one is a byte-identical copy of a pub.dev
   release, plus this file and `.gitignore`.
-- `fix/canvas-lookup-leak`: the fix, on top of the pristine commit.
+- `fix/canvas-lookup-leak`: the fixes, one commit each, on top of the pristine
+  commit. Tags are cut from this branch.
 
 ## Rebasing onto a new upstream version
 
@@ -31,8 +40,8 @@ and verifies Rive's official prebuilt native libraries. We host no binaries.
 2. On `main`, replace every tracked file except `FORK.md` and `.gitignore` with
    the unpacked tree, and commit it as a fresh pristine commit:
    `chore: vendor rive_native <version> verbatim from pub.dev`
-3. Cherry-pick the fix onto it:
-   `git checkout -B fix/canvas-lookup-leak main && git cherry-pick <fix sha>`
+3. Cherry-pick the fixes onto it, oldest first:
+   `git checkout -B fix/canvas-lookup-leak main && git cherry-pick <fix shas>`
 4. Tag the result (`v<version>-betclic.N`) and bump the ref in the monorepo.
 
-Drop the fork once upstream ships the fix.
+Drop a fix once upstream ships it, and the fork once none is left.

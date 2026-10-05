@@ -508,20 +508,43 @@ class FFIFlutterFactory extends FFIFactory implements Finalizable {
     images.remove(image);
   }
 
+  /// Decodes [bytes], or returns null when the engine rejects them (invalid
+  /// data, or an allocation refused under memory pressure).
+  ///
+  /// `ui.decodeImageFromList` is not used: it only invokes its callback on
+  /// success, so a failure would leave the image's completer pending forever,
+  /// and with it every later `completedDecodingFile` that awaits
+  /// [_loadingImages].
+  static Future<ui.Image?> _decodeUiImage(Uint8List bytes) async {
+    try {
+      final codec = await ui.instantiateImageCodec(bytes);
+      try {
+        return (await codec.getNextFrame()).image;
+      } finally {
+        codec.dispose();
+      }
+    } catch (_) {
+      return null;
+    }
+  }
+
   @override
   Future<RenderImage?> decodeImage(Uint8List bytes) {
     final image = _makeFlutterRenderImage(pointer);
     var flutterImage = FFIFlutterFactoryImage();
     FFIFlutterFactory._loadingImages.add(flutterImage);
     images[_flutterRenderImageId(image)] = flutterImage;
-    ui.decodeImageFromList(
-      bytes,
-      (uiImage) {
-        flutterImage.image = uiImage;
-        _renderImageSetSize(image, uiImage.width, uiImage.height);
-        flutterImage.completer?.complete(FFIRenderImage(image));
-      },
-    );
+    unawaited(_decodeUiImage(bytes).then((uiImage) {
+      if (uiImage == null) {
+        // Releases the native image, which removes it from [images].
+        FFIRenderImage(image).dispose();
+        flutterImage.completer?.complete(null);
+        return;
+      }
+      flutterImage.image = uiImage;
+      _renderImageSetSize(image, uiImage.width, uiImage.height);
+      flutterImage.completer?.complete(FFIRenderImage(image));
+    }));
     return flutterImage.completer!.future;
   }
 
@@ -534,14 +557,15 @@ class FFIFlutterFactory extends FFIFactory implements Finalizable {
     // Copy it as the Flutter decoder is async.
     var bytesList = Uint8List.fromList(bytes.asTypedList(size));
 
-    ui.decodeImageFromList(
-      bytesList,
-      (uiImage) {
+    // The native image is owned by the file, so a failed decode only leaves it
+    // without pixels: it draws nothing, as an image that was never provided.
+    unawaited(_decodeUiImage(bytesList).then((uiImage) {
+      if (uiImage != null) {
         flutterImage.image = uiImage;
         _renderImageSetSize(image, uiImage.width, uiImage.height);
-        flutterImage.completer?.complete(null);
-      },
-    );
+      }
+      flutterImage.completer?.complete(null);
+    }));
   }
 
   static final FFIFlutterFactory _instance = FFIFlutterFactory._();
